@@ -135,29 +135,28 @@ module.exports = (socketio) => {
 
   const getRideForDriver = async (req, res) => {
     const { driverId } = req.query;
-
-    Ride.findOne(
-      {
-        driver_id: driverId,
-        customers: {
-          $elemMatch: {
-            isRejected: false,
-            isCompleted: false,
-          },
+    console.log(driverId);
+    Ride.findOne({
+      driver_id: ObjectID(driverId),
+      customers: {
+        $elemMatch: {
+          isRejected: false,
+          isCompleted: false,
         },
       },
-      (err, ride) => {
+    })
+      .populate("customers._id")
+      .exec((err, ride) => {
         console.log("DRIVER", ride, err);
         if (err) res.send(err);
         if (ride === null) res.status(500).send("no rides");
         else res.send(ride);
-      }
-    );
+      });
   };
 
   const rideDecide = (req, res) => {
     const { rideId, userId, accept, driverId } = req.body;
-    console.log(req.body);
+    console.log("RIDE DECIDE", req.body);
     Driver.findOneAndUpdate(
       { _id: driverId },
       { onGoingRideId: rideId },
@@ -173,9 +172,9 @@ module.exports = (socketio) => {
           },
         },
         { new: true }
-      ).then((err, ride) => {
+      ).then((ride, err) => {
         socketio.to(userId.toString()).emit("accepted", { message: ride });
-        //console.log(err, ride);
+        console.log(err, ride);
         if (err) {
           res.send(err);
         }
@@ -191,8 +190,8 @@ module.exports = (socketio) => {
           },
         },
         { new: true }
-      ).then((err, ride) => {
-        console.log(userId.toString());
+      ).then((ride, err) => {
+        console.log(ride, err);
         socketio.to(userId.toString()).emit("accepted", { message: ride });
         //console.log(err, ride);
         if (err) {
@@ -291,22 +290,23 @@ module.exports = (socketio) => {
       (ride) => res.send(ride)
     );
   };
-  const closetheRide = (req, res) => {
+  const closetheRide = async (req, res) => {
     const { driverId } = req.query;
     console.log("CLOSE RIDE", req.query);
-    Ride.findOneAndUpdate(
-      { _id: driverId },
-      { isCompleted: false },
+    await Ride.findOneAndUpdate(
+      { driver_id: driverId },
+      { isCompleted: false, driver_id: null },
       { new: true }
     );
     Driver.findOneAndUpdate(
       { _id: driverId },
       { onGoingRideId: null },
       { new: true }
-    ).then(
-      (err) => res.send(err),
-      (ride) => res.send(ride)
-    );
+    ).then((err, ride) => {
+      // console.log(err);
+      if (err) res.send(err);
+      else res.send(ride);
+    });
   };
   router.post("/book", createBooking);
   router.patch("/completeRide", completeRide);
